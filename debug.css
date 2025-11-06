@@ -1,0 +1,57 @@
+/* Debug CSS - Add borders and backgrounds to see layout issues */
+
+.app {
+  outline: 3px solid red !important;
+}
+
+.panes {
+  outline: 3px solid blue !important;
+}
+
+.pane {
+  outline: 3px solid green !important;
+}
+
+#pane-md {
+  background: rgba(139, 69, 19, 0.3) !important;
+}
+
+#pane-rich {
+  background: rgba(0, 100, 0, 0.3) !important;
+}
+
+#md {
+  outline: 3px solid yellow !important;
+  background: rgba(255, 255, 0, 0.2) !important;
+}
+
+#rich {
+  outline: 3px solid cyan !important;
+  background: rgba(0, 139, 139, 0.3) !important;
+}
+
+.toolbar {
+  outline: 2px solid magenta !important;
+}
+
+/* Show dimensions */
+.pane::before {
+  content: 'Pane: ' attr(id);
+  position: absolute;
+  background: black;
+  color: white;
+  padding: 2px 5px;
+  font-size: 10px;
+  z-index: 1000;
+}
+
+textarea::before {
+  content: 'Textarea width: ' attr(style);
+  position: absolute;
+  background: yellow;
+  color: black;
+  padding: 2px 5px;
+  font-size: 10px;
+  z-index: 1001;
+  top: 50px;
+}

@@ -1,0 +1,1320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Markdown ⇄ Rich Text</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <!-- Debug CSS (uncomment to enable): <link rel="stylesheet" href="debug.css"> -->
+  <style>
+    /* ========================================
+       CSS Variables - Theme Colors
+       Supports both dark and light mode via prefers-color-scheme
+       ======================================== */
+    :root {
+      /* Dark mode (default) */
+      --bg: #0b0c0f;      /* Main background */
+      --fg: #e6e7ea;      /* Foreground text */
+      --muted: #a9acb3;   /* Muted/secondary text */
+      --panel: #14161a;   /* Panel/toolbar background */
+      --border: #2a2e35;  /* Border color */
+      --accent: #4c8bf5;  /* Accent color (links, focus) */
+    }
+
+    /* Light mode override */
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #fff;
+        --fg: #111;
+        --muted: #555;
+        --panel: #f6f7f9;
+        --border: #dfe3e8;
+        --accent: #2b6ced;
+      }
+    }
+
+    /* ========================================
+       Base Styles
+       ======================================== */
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    /* ========================================
+       App Layout
+       Single column grid with header and content area
+       ======================================== */
+    .app {
+      display: grid;
+      grid-template-columns: 1fr;  /* Single column - fixed to prevent squishing */
+      gap: 0;
+      height: 100vh;
+      grid-template-rows: auto 1fr; /* Header (auto) + content (remaining space) */
+    }
+
+    /* ========================================
+       Header
+       ======================================== */
+    header {
+      grid-column: 1 / -1;  /* Span full width */
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 16px;
+      margin: 0;
+      font-weight: 600;
+    }
+
+    /* ========================================
+       Panes Layout
+       Three-column grid: Markdown pane | divider | Rich text pane
+       --left-width CSS variable controls split position (defaults to 50%)
+       ======================================== */
+    .panes {
+      display: grid;
+      /* minmax(0, ...) prevents content overflow issues */
+      grid-template-columns: minmax(0, var(--left-width, 1fr)) 8px minmax(0, 1fr);
+      height: calc(100vh - 56px);  /* Full viewport minus header height */
+      width: 100%;
+    }
+
+    /* Individual pane container */
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;      /* Allow shrinking below content width */
+      overflow: hidden;  /* Prevent overflow */
+    }
+
+    /* ========================================
+       Toolbar
+       ======================================== */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toolbar h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* ========================================
+       Buttons and Select Dropdowns
+       ======================================== */
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+    }
+
+    .btn:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    /* Select dropdown with custom arrow icon */
+    select.btn {
+      padding-right: 24px;  /* Make room for arrow icon */
+      /* Inline SVG for dropdown arrow (dark mode) */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e6e7ea' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+
+    /* Light mode dropdown arrow */
+    @media (prefers-color-scheme: light) {
+      select.btn {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23111' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      }
+    }
+
+    /* ========================================
+       Markdown Editor (Textarea)
+       Configured to wrap text properly and prevent horizontal overflow
+       ======================================== */
+    textarea {
+      flex: 1;  /* Fill available space */
+      border: 0;
+      background: transparent;
+      color: var(--fg);
+      resize: none;  /* Disable manual resizing */
+      padding: 12px;
+      line-height: 1.6;
+      font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      outline: none;
+      caret-color: var(--accent);
+
+      /* Critical for preventing text truncation */
+      width: 100%;
+      min-width: 0;          /* Allow shrinking */
+      max-width: 100%;       /* Prevent overflow */
+      box-sizing: border-box;
+
+      /* Text wrapping configuration */
+      white-space: pre-wrap;      /* Preserve whitespace but wrap */
+      word-wrap: break-word;      /* Break long words */
+      overflow-wrap: anywhere;    /* Break anywhere if needed */
+
+      /* Scrolling */
+      overflow-x: hidden;  /* Never show horizontal scrollbar */
+      overflow-y: auto;    /* Show vertical scrollbar when needed */
+    }
+
+    /* ========================================
+       Rich Text Editor (ContentEditable)
+       ======================================== */
+    .rich {
+      flex: 1;  /* Fill available space */
+      overflow: auto;
+      padding: 12px;
+      outline: none;
+      color: var(--fg);
+    }
+
+    /* Ensure all child elements inherit color (fixes dark mode issues) */
+    .rich * {
+      color: inherit;
+    }
+
+    /* Make empty contenteditable div take up space */
+    .rich:empty:before {
+      content: "";
+      display: block;
+      height: 1px;
+    }
+
+    /* ========================================
+       Resizable Divider
+       ======================================== */
+    .divider {
+      background: var(--border);
+      cursor: col-resize;  /* Show resize cursor */
+      width: 8px;
+      display: block;
+    }
+
+    /* ========================================
+       Toast Notifications
+       ======================================== */
+    .toast {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);  /* Center horizontally */
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 8px;
+      opacity: 0;  /* Hidden by default */
+      transition: opacity 0.15s ease;
+      pointer-events: none;  /* Don't interfere with clicks */
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+
+    /* ========================================
+       Links
+       ======================================== */
+    a {
+      color: var(--accent);
+    }
+
+    /* ========================================
+       Responsive Layout - Mobile/Tablet
+       Switch from side-by-side to stacked layout on small screens
+       ======================================== */
+    @media (max-width: 900px) {
+      .panes {
+        /* Stack panes vertically: Markdown | divider | Rich text */
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 8px auto;
+      }
+
+      .divider {
+        height: 8px;
+        width: auto;
+        cursor: row-resize;  /* Vertical resize cursor */
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Markdown ⇄ Rich Text</h1>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" id="pasteBtn" aria-label="Paste from clipboard">Paste</button>
+        <button class="btn" id="resetBtn" aria-label="Clear editors">Clear</button>
+      </div>
+    </header>
+
+    <div class="panes" id="panes">
+      <!-- Markdown pane -->
+      <section class="pane" id="pane-md" aria-label="Markdown pane">
+        <div class="toolbar">
+          <h2>Markdown</h2>
+          <div style="display: flex; gap: 8px;">
+            <select class="btn" id="transformSelect" aria-label="Apply transformation">
+              <option value="">Transforms...</option>
+              <option value="strip-wiki-links">Strip Wiki Links</option>
+              <option value="wiki-to-markdown">Wiki Links → Markdown Links</option>
+              <option value="strip-comments">Strip %% %% Comments</option>
+            </select>
+            <button class="btn" id="copyMd" aria-label="Copy Markdown">Copy Markdown</button>
+          </div>
+        </div>
+        <textarea id="md" aria-label="Markdown editor" spellcheck="false" placeholder="# Start typing Markdown…" wrap="soft"></textarea>
+      </section>
+
+      <!-- Divider -->
+      <div class="divider" id="divider" role="separator" aria-orientation="vertical" aria-label="Resize panes"></div>
+
+      <!-- Rich Text pane -->
+      <section class="pane" id="pane-rich" aria-label="Rich text pane">
+        <div class="toolbar">
+          <h2>Rich Text</h2>
+          <button class="btn" id="copyHtml" aria-label="Copy Rich Text">Copy Rich Text</button>
+        </div>
+        <div id="rich" class="rich" contenteditable="true" aria-label="Rich text editor"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Dependencies (CDN). For full-offline, vendor these inline. -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@13/dist/markdown-it.min.js" integrity="" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js" integrity="" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js" integrity="" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js" integrity="" crossorigin="anonymous"></script>
+
+  <script>
+  (function () {
+    "use strict";
+
+    /* ========================================
+       UTILITY FUNCTIONS
+       ======================================== */
+
+    /**
+     * Shorthand for document.getElementById
+     * @param {string} id - Element ID
+     * @returns {HTMLElement} The element
+     */
+    const $ = (id) => document.getElementById(id);
+
+    /**
+     * Show a temporary toast notification
+     * @param {string} msg - Message to display
+     */
+    const toast = (msg) => {
+      const t = $("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => t.classList.remove("show"), 1200);
+    };
+
+    /**
+     * Debounce function calls to prevent excessive updates
+     * @param {Function} fn - Function to debounce
+     * @param {number} delay - Delay in milliseconds (default: 150ms)
+     * @returns {Function} Debounced function
+     */
+    const debounce = (fn, delay=150) => {
+      let tt;
+      return (...args) => {
+        clearTimeout(tt);
+        tt = setTimeout(() => fn(...args), delay);
+      };
+    };
+
+    // localStorage key for persisting content
+    const storageKey = "mdrt.content.v1";
+
+    /* ========================================
+       MARKDOWN-IT CONFIGURATION
+       Converts Markdown → HTML
+       ======================================== */
+
+    // Initialize markdown-it with GitHub Flavored Markdown support
+    const md = window.markdownit({
+      html: true,          // Allow inline HTML in Markdown source
+      linkify: true,       // Auto-convert URLs to links
+      typographer: true,   // Smart quotes, em-dashes, ellipses
+      breaks: false        // Don't convert \n to <br> (use two spaces or <br>)
+    });
+
+    /**
+     * Preprocessor: Strip Obsidian-style %% %% comments before rendering
+     * This prevents comment blocks from appearing in the rich text view
+     */
+    const originalRender = md.render.bind(md);
+    md.render = function(src, env) {
+      // Remove %% %% comment blocks (supports multiline comments)
+      src = src.replace(/%%[\s\S]*?%%/g, '');
+      return originalRender(src, env);
+    };
+
+    /**
+     * Post-processor: Make external links secure
+     * Adds rel="noopener noreferrer" and target="_blank"
+     * @param {HTMLElement} root - Root element to process
+     */
+    const secureLinks = (root) => {
+      root.querySelectorAll("a[href]").forEach(a => {
+        a.setAttribute("rel", "noopener noreferrer");
+        a.setAttribute("target", "_blank");
+      });
+    };
+
+    /* ========================================
+       TURNDOWN CONFIGURATION
+       Converts HTML → Markdown
+       ======================================== */
+
+    // Initialize Turndown with standard Markdown preferences
+    const turndownService = new TurndownService({
+      headingStyle: 'atx',           // Use # syntax for headings
+      hr: '---',                     // Horizontal rule style
+      bulletListMarker: '-',         // Use - for unordered lists
+      codeBlockStyle: 'fenced',      // Use ``` for code blocks
+      fence: '```',                  // Fence characters
+      emDelimiter: '*',              // Use * for italic
+      strongDelimiter: '**'          // Use ** for bold
+    });
+
+    // Add GFM (GitHub Flavored Markdown) extensions
+    // Note: We handle tables with a custom rule, so only use strikethrough and task lists
+    turndownService.use([
+      turndownPluginGfm.strikethrough,  // ~~strikethrough~~
+      turndownPluginGfm.taskListItems   // - [ ] and - [x]
+    ]);
+
+    // Keep HTML elements that don't have Markdown equivalents
+    turndownService.keep(['u', 'sup', 'sub']); // underline, superscript, subscript
+
+    /**
+     * Custom table conversion rule with colspan support
+     * Handles complex tables from Google Docs and other sources
+     * Converts <table> elements to GitHub Flavored Markdown tables
+     */
+    turndownService.addRule('tables', {
+      filter: 'table',
+      replacement: function (content, node) {
+        const rows = Array.from(node.querySelectorAll('tr'));
+        if (rows.length === 0) return '';
+
+        // FIRST PASS: Determine maximum column count
+        // This is needed because some rows may have colspan attributes
+        let maxCols = 0;
+        rows.forEach(row => {
+          const cells = Array.from(row.querySelectorAll('th, td'));
+          let colCount = 0;
+          cells.forEach(cell => {
+            // Account for colspan (merged cells)
+            const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+            colCount += colspan;
+          });
+          maxCols = Math.max(maxCols, colCount);
+        });
+
+        // Tables MUST be preceded and followed by blank lines in Markdown
+        let markdown = '\n\n';
+
+        // SECOND PASS: Convert each row
+        rows.forEach((row, rowIndex) => {
+          const cells = Array.from(row.querySelectorAll('th, td'));
+
+          // Process each cell in the row
+          const cellContent = [];
+          cells.forEach(cell => {
+            // Recursively convert cell content to Markdown (preserves bold, italic, etc.)
+            let cellMd = turndownService.turndown(cell.innerHTML);
+
+            // Clean up cell content
+            cellMd = cellMd.trim().replace(/\n+/g, ' ');  // Remove newlines
+            cellMd = cellMd.replace(/\|/g, '\\|');       // Escape pipe characters
+
+            const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+
+            // Add the cell content
+            cellContent.push(cellMd || ' ');
+
+            // Add empty cells for colspan > 1 (merged cells)
+            for (let i = 1; i < colspan; i++) {
+              cellContent.push(' ');
+            }
+          });
+
+          // Pad row with empty cells if needed (handles irregular tables)
+          while (cellContent.length < maxCols) {
+            cellContent.push(' ');
+          }
+
+          // Build Markdown table row: | cell | cell | cell |
+          markdown += '| ' + cellContent.join(' | ') + ' |\n';
+
+          // Add separator line after header row (first row)
+          // GFM format: | --- | --- | --- |
+          if (rowIndex === 0) {
+            markdown += '| ' + Array(maxCols).fill('---').join(' | ') + ' |\n';
+          }
+        });
+
+        // Close table with blank line
+        return markdown + '\n\n';
+      }
+    });
+
+    /**
+     * Custom list item rule (overrides GFM)
+     * Prevents extra blank lines between list items for cleaner output
+     */
+    turndownService.addRule('compactListItem', {
+      filter: 'li',
+      replacement: function (content, node, options) {
+        // Clean up content
+        content = content
+          .replace(/^\n+/, '')        // Remove leading newlines
+          .replace(/\n+$/, '')        // Remove all trailing newlines
+          .replace(/\n/gm, '\n  ');   // Indent nested content by 2 spaces
+
+        // Determine list marker prefix
+        let prefix = options.bulletListMarker + ' ';  // Default: unordered list
+        const parent = node.parentNode;
+
+        // Handle ordered lists (1., 2., 3., etc.)
+        if (parent.nodeName === 'OL') {
+          const start = parent.getAttribute('start');
+          const index = Array.prototype.indexOf.call(parent.children, node);
+          prefix = (start ? Number(start) + index : index + 1) + '. ';
+        }
+
+        // Only add newline between consecutive list items (no blank lines)
+        const suffix = node.nextSibling && node.nextSibling.nodeName === 'LI' ? '\n' : '';
+
+        return prefix + content + suffix;
+      }
+    });
+
+    /* ========================================
+       DOM ELEMENTS
+       Cache references to frequently accessed elements
+       ======================================== */
+    const mdTA = $("md");                           // Markdown textarea
+    const rich = $("rich");                         // Rich text contenteditable div
+    const pasteBtn = $("pasteBtn");                 // Smart paste button (header)
+    const copyMdBtn = $("copyMd");                  // Copy Markdown button
+    const copyHtmlBtn = $("copyHtml");              // Copy Rich Text button
+    const divider = $("divider");                   // Resizable divider
+    const panes = $("panes");                       // Panes container
+    const resetBtn = $("resetBtn");                 // Clear button
+    const transformSelect = $("transformSelect");   // Transform dropdown
+
+    /* ========================================
+       APPLICATION STATE
+       ======================================== */
+    const state = {
+      lastEdited: 'md',  // Track which pane was last edited ('md' or 'rich')
+      syncing: false     // Prevent feedback loops during bidirectional sync
+    };
+
+    /* ========================================
+       HTML NORMALIZATION HELPERS
+       Used to clean up pasted content from Google Docs and other sources
+       ======================================== */
+
+    /**
+     * Normalize table structure for better Markdown conversion
+     * Removes styling attributes and ensures proper thead/tbody structure
+     *
+     * NOTE: Only call this on PASTED content, not on clean markdown-it output!
+     *
+     * @param {HTMLElement} root - Root element containing tables
+     */
+    const normalizeTables = (root) => {
+      root.querySelectorAll('table').forEach(table => {
+        // Strip all formatting attributes from table elements
+        // These interfere with Markdown conversion
+        table.querySelectorAll('table, thead, tbody, tr, th, td').forEach(el => {
+          el.removeAttribute('style');
+          el.removeAttribute('width');
+          el.removeAttribute('height');
+          el.removeAttribute('border');
+          el.removeAttribute('cellpadding');
+          el.removeAttribute('cellspacing');
+        });
+
+        // Ensure proper table structure (thead + tbody)
+        // Some sources (like Google Docs) may have malformed table structure
+        if (!table.querySelector('thead') && table.querySelector('tr')) {
+          const firstRow = table.querySelector('tr');
+          const hasThCells = firstRow.querySelector('th');
+
+          // If first row contains <th> cells, move it to <thead>
+          if (hasThCells) {
+            const thead = document.createElement('thead');
+            const tbody = table.querySelector('tbody') || document.createElement('tbody');
+
+            // Move first row to thead
+            thead.appendChild(firstRow);
+            table.insertBefore(thead, table.firstChild);
+
+            // Move remaining rows to tbody
+            if (!table.querySelector('tbody')) {
+              const rows = Array.from(table.querySelectorAll('tr')).slice(1);
+              rows.forEach(row => tbody.appendChild(row));
+              table.appendChild(tbody);
+            }
+          }
+        }
+      });
+    };
+
+    /**
+     * Convert inline styles to semantic HTML tags
+     * Google Docs and other sources use <span style="font-weight:bold"> instead of <strong>
+     * This converts styled spans to proper semantic HTML for better Markdown conversion
+     *
+     * NOTE: Only call this on PASTED content, not on clean markdown-it output!
+     *
+     * @param {HTMLElement} root - Root element to normalize
+     */
+    const normalizeFormatting = (root) => {
+      root.querySelectorAll('*').forEach(el => {
+        const style = window.getComputedStyle(el);
+
+        // Convert font-weight to <strong> tag
+        if (style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 600) {
+          // Skip if already a semantic tag or heading
+          if (el.tagName !== 'STRONG' && el.tagName !== 'B' &&
+              el.tagName !== 'H1' && el.tagName !== 'H2' && el.tagName !== 'H3' &&
+              el.tagName !== 'H4' && el.tagName !== 'H5' && el.tagName !== 'H6') {
+            const strong = document.createElement('strong');
+            strong.innerHTML = el.innerHTML;
+
+            // Preserve non-style attributes
+            Array.from(el.attributes).forEach(attr => {
+              if (attr.name !== 'style') {
+                strong.setAttribute(attr.name, attr.value);
+              }
+            });
+
+            el.parentNode.replaceChild(strong, el);
+          }
+        }
+
+        // Convert font-style:italic to <em> tag
+        if (style.fontStyle === 'italic') {
+          if (el.tagName !== 'EM' && el.tagName !== 'I') {
+            const em = document.createElement('em');
+            em.innerHTML = el.innerHTML;
+
+            // Preserve non-style attributes
+            Array.from(el.attributes).forEach(attr => {
+              if (attr.name !== 'style') {
+                em.setAttribute(attr.name, attr.value);
+              }
+            });
+
+            el.parentNode.replaceChild(em, el);
+          }
+        }
+      });
+    };
+
+    /**
+     * Strip color and font styles from elements
+     * Prevents dark mode issues and removes unnecessary styling
+     * Safe to call on both pasted content and markdown-it output
+     *
+     * @param {HTMLElement} root - Root element to clean
+     */
+    const stripColorStyles = (root) => {
+      root.querySelectorAll('*').forEach(el => {
+        // Remove problematic style properties
+        el.style.removeProperty('color');
+        el.style.removeProperty('background-color');
+        el.style.removeProperty('font-family');
+        el.style.removeProperty('font-weight');
+        el.style.removeProperty('font-style');
+
+        // Remove empty style attribute
+        if (!el.getAttribute('style') || el.getAttribute('style').trim() === '') {
+          el.removeAttribute('style');
+        }
+      });
+    };
+
+    /* ========================================
+       BIDIRECTIONAL CONVERSION FUNCTIONS
+       These are debounced to prevent performance issues
+       ======================================== */
+
+    /**
+     * Convert Markdown to HTML (for Rich Text pane)
+     * Flow: Markdown textarea → markdown-it → DOMPurify → Rich Text pane
+     *
+     * IMPORTANT: We do NOT call normalizeTables/normalizeFormatting here!
+     * Those functions are only for cleaning up PASTED content.
+     * markdown-it produces clean, correct HTML that should not be modified.
+     */
+    const mdToHtml = debounce(() => {
+      // Prevent feedback loop if we're already syncing
+      if (state.syncing) return;
+      state.syncing = true;
+
+      try {
+        // Step 1: Convert Markdown to HTML
+        const rendered = md.render(mdTA.value);
+
+        // Step 2: Sanitize HTML for security (XSS protection)
+        const sanitized = DOMPurify.sanitize(rendered, {USE_PROFILES: {html: true}});
+
+        // Step 3: Update Rich Text pane
+        rich.innerHTML = sanitized;
+
+        // Step 4: Clean up styling (safe for markdown-it output)
+        stripColorStyles(rich);
+
+        // Step 5: Make external links secure
+        secureLinks(rich);
+
+        // Step 6: Persist to localStorage
+        save();
+      } catch (e) {
+        console.error(e);
+        toast("Conversion failed (MD→HTML)");
+      } finally {
+        state.syncing = false;
+      }
+    });
+
+    /**
+     * Convert HTML to Markdown (for Markdown pane)
+     * Flow: Rich Text pane → Turndown → cleanup → Markdown textarea
+     */
+    const htmlToMd = debounce(() => {
+      // Prevent feedback loop if we're already syncing
+      if (state.syncing) return;
+      state.syncing = true;
+
+      try {
+        // Step 1: Convert HTML to Markdown using Turndown
+        let mdText = turndownService.turndown(rich);
+
+        // Step 2: Clean up artifacts from Google Docs and other rich text sources
+        // Remove lines that contain only formatting characters (no actual content)
+        mdText = mdText.split('\n').filter(line => {
+          const trimmed = line.trim();
+          // Filter out problematic patterns:
+          // - Just asterisks: ** or * or __ or _
+          // - Headings with no content: # or ## or # **
+          return !(
+            trimmed === '**' ||
+            trimmed === '*' ||
+            trimmed === '__' ||
+            trimmed === '_' ||
+            /^#{1,6}\s*\*\*\s*$/.test(trimmed) ||  // # ** or ## ** etc.
+            /^#{1,6}\s*$/.test(trimmed) ||          // # or ## with no text
+            trimmed === '# **'
+          );
+        }).join('\n');
+
+        // Step 3: Clean up excessive newlines
+        // Google Docs often adds too many blank lines
+        // Replace 3+ consecutive newlines with just 2 (one blank line)
+        mdText = mdText.replace(/\n{3,}/g, '\n\n');
+
+        // Step 4: Remove blank lines between consecutive list items
+        // Lists should be compact without blank lines between items
+
+        // Pattern 1: unordered list items
+        mdText = mdText.replace(/(\n[-*+]\s+.+)\n\n(\n[-*+]\s+)/g, '$1\n$2');
+
+        // Pattern 2: ordered list items
+        mdText = mdText.replace(/(\n\d+\.\s+.+)\n\n(\n\d+\.\s+)/g, '$1\n$2');
+
+        // Pattern 3: aggressive cleanup - remove blank lines between ANY two list items
+        mdText = mdText.replace(/(^|\n)([-*+]|\d+\.)\s+(.+?)\n\n(?=([-*+]|\d+\.)\s+)/gm, '$1$2 $3\n');
+
+        // Step 5: Trim excessive spacing at start/end
+        mdText = mdText.trim();
+
+        // Step 6: Update Markdown pane
+        mdTA.value = mdText;
+
+        // Step 7: Persist to localStorage
+        save();
+      } catch (e) {
+        console.error(e);
+        toast("Conversion failed (HTML→MD)");
+      } finally {
+        state.syncing = false;
+      }
+    });
+
+    /* ========================================
+       EVENT LISTENERS
+       ======================================== */
+
+    /**
+     * Markdown textarea input handler
+     * Triggers conversion to HTML when user types in Markdown pane
+     */
+    mdTA.addEventListener('input', () => {
+      state.lastEdited = 'md';
+      mdToHtml();
+    });
+
+    /**
+     * Rich text input handler
+     * Triggers conversion to Markdown when user edits Rich Text pane
+     */
+    rich.addEventListener('input', (ev) => {
+      // Ignore input events that are side-effects of our own innerHTML writes
+      if (state.syncing) return;
+
+      state.lastEdited = 'rich';
+      htmlToMd();
+    });
+
+    /**
+     * Keyboard shortcuts for Rich Text pane
+     * - Cmd/Ctrl+B: Bold
+     * - Cmd/Ctrl+I: Italic
+     * - Cmd/Ctrl+K: Insert link
+     * - Cmd/Ctrl+Enter: Switch to Markdown pane
+     */
+    rich.addEventListener('keydown', (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      // Bold
+      if (e.key.toLowerCase() === 'b') {
+        document.execCommand('bold');
+        e.preventDefault();
+      }
+
+      // Italic
+      if (e.key.toLowerCase() === 'i') {
+        document.execCommand('italic');
+        e.preventDefault();
+      }
+
+      // Insert link
+      if (e.key.toLowerCase() === 'k') {
+        const url = prompt('Link URL:');
+        if (url) document.execCommand('createLink', false, url);
+        e.preventDefault();
+      }
+
+      // Switch to Markdown pane
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        mdTA.focus();
+        e.preventDefault();
+      }
+    });
+
+    /**
+     * Keyboard shortcuts for Markdown pane
+     * - Cmd/Ctrl+Enter: Switch to Rich Text pane
+     */
+    mdTA.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        rich.focus();
+        e.preventDefault();
+      }
+    });
+
+    /**
+     * Smart paste handler for Rich Text pane
+     * Handles pasting from:
+     * - Google Docs, Word, etc. (HTML)
+     * - Markdown text
+     * - Plain text
+     */
+    rich.addEventListener('paste', (e) => {
+      e.preventDefault();
+
+      const cd = e.clipboardData || window.clipboardData;
+      const html = cd.getData('text/html');         // Rich text (HTML)
+      const mdText = cd.getData('text/markdown');   // Markdown (rare)
+      const plain = cd.getData('text/plain');       // Plain text
+
+      let toInsert = '';
+
+      if (html) {
+        // HTML content (from Word, Google Docs, etc.)
+        toInsert = DOMPurify.sanitize(html, {USE_PROFILES: {html: true}});
+      } else {
+        // Plain text or Markdown
+        const text = mdText || plain || '';
+
+        // Heuristic: Does this look like Markdown?
+        // Check for common Markdown patterns
+        const looksMd = /(^|\n)#{1,6}\s|(^|\n)(-|\*|\+)\s|(^|\n)\d+\.\s|```|!\[.*\]\(.*\)|\[[^\]]+\]\([^)]+\)|(^|\n)>\s/.test(text);
+
+        if (mdText || looksMd) {
+          // Convert Markdown to HTML
+          const rendered = md.render(text);
+          toInsert = DOMPurify.sanitize(rendered, {USE_PROFILES: {html: true}});
+        } else {
+          // Plain text - preserve line breaks
+          toInsert = DOMPurify.sanitize(text).replace(/\n/g, '<br>');
+        }
+      }
+
+      // Insert the content at cursor position
+      document.execCommand('insertHTML', false, toInsert);
+
+      // Clean up pasted content (Google Docs, etc.)
+      // IMPORTANT: Only call these on pasted content!
+      normalizeTables(rich);       // Fix table structure
+      normalizeFormatting(rich);   // Convert styled spans to semantic HTML
+      stripColorStyles(rich);      // Remove color/font styles
+      secureLinks(rich);           // Make links secure
+
+      // Sync to Markdown pane
+      htmlToMd();
+
+      // Show feedback
+      toast(mdText ? "Pasted Markdown ✓" : html ? "Pasted HTML ✓" : "Pasted ✓");
+    });
+
+    /* ========================================
+       COPY & PASTE BUTTON HANDLERS
+       ======================================== */
+
+    /**
+     * Smart Paste button (in header)
+     * Intelligently routes clipboard content to the appropriate pane:
+     * - Rich text (HTML) → Rich Text pane
+     * - Plain text → Markdown pane
+     * - Markdown-like text → Markdown pane
+     */
+    pasteBtn.addEventListener('click', async () => {
+      try {
+        // Try modern Clipboard API
+        if (navigator.clipboard?.read) {
+          const clipboardItems = await navigator.clipboard.read();
+
+          for (const item of clipboardItems) {
+            // PRIORITY 1: Check for HTML/Rich Text first
+            if (item.types.includes('text/html')) {
+              const blob = await item.getType('text/html');
+              const html = await blob.text();
+              const sanitized = DOMPurify.sanitize(html, {USE_PROFILES: {html: true}});
+
+              // Focus and paste into Rich Text pane
+              rich.focus();
+
+              // Insert at cursor position in contenteditable
+              const selection = window.getSelection();
+              if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                range.deleteContents();
+                const temp = document.createElement('div');
+                temp.innerHTML = sanitized;
+                const frag = document.createDocumentFragment();
+                while (temp.firstChild) {
+                  frag.appendChild(temp.firstChild);
+                }
+                range.insertNode(frag);
+              } else {
+                // No selection, append to end
+                rich.innerHTML += sanitized;
+              }
+
+              // Clean up pasted content
+              normalizeTables(rich);
+              normalizeFormatting(rich);
+              stripColorStyles(rich);
+              secureLinks(rich);
+
+              // Sync to Markdown
+              state.lastEdited = 'rich';
+              htmlToMd();
+
+              toast("Rich Text pasted ✓");
+              return;
+            }
+
+            // PRIORITY 2: Plain text only - paste to Markdown pane
+            if (item.types.includes('text/plain')) {
+              const blob = await item.getType('text/plain');
+              const text = await blob.text();
+
+              // Focus and paste into Markdown pane
+              mdTA.focus();
+
+              // Insert at cursor position or replace selection
+              const start = mdTA.selectionStart;
+              const end = mdTA.selectionEnd;
+              const currentValue = mdTA.value;
+              mdTA.value = currentValue.substring(0, start) + text + currentValue.substring(end);
+
+              // Move cursor to end of pasted text
+              mdTA.selectionStart = mdTA.selectionEnd = start + text.length;
+
+              // Trigger conversion to Rich Text
+              state.lastEdited = 'md';
+              mdToHtml();
+
+              toast("Pasted to Markdown ✓");
+              return;
+            }
+          }
+
+          // No supported formats found
+          toast("No supported clipboard format");
+        } else {
+          // Fallback: focus Markdown pane and let user paste manually
+          mdTA.focus();
+          toast("Please use Ctrl/Cmd+V to paste");
+        }
+      } catch (e) {
+        // Clipboard permission denied or not available
+        console.error('Paste failed:', e);
+        mdTA.focus();
+        toast("Please use Ctrl/Cmd+V to paste");
+      }
+    });
+
+    /**
+     * Copy Markdown button
+     * Copies plain text Markdown to clipboard
+     */
+    copyMdBtn.addEventListener('click', async () => {
+      try {
+        // Try modern Clipboard API first
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(mdTA.value);
+        } else {
+          // Fallback for older browsers
+          mdTA.select();
+          document.execCommand('copy');
+          mdTA.setSelectionRange(mdTA.value.length, mdTA.value.length);
+        }
+        toast("Markdown copied ✓");
+      } catch {
+        toast("Copy failed");
+      }
+    });
+
+    /**
+     * Copy Rich Text button
+     * Copies HTML with plain text fallback
+     * Works in email clients, document editors, etc.
+     */
+    copyHtmlBtn.addEventListener('click', async () => {
+      const html = rich.innerHTML;
+      const plain = rich.innerText;
+
+      try {
+        // Try modern Clipboard API with multiple formats
+        if (navigator.clipboard?.write && window.ClipboardItem) {
+          const item = new ClipboardItem({
+            'text/html': new Blob([html], {type: 'text/html'}),
+            'text/plain': new Blob([plain], {type: 'text/plain'}),
+          });
+          await navigator.clipboard.write([item]);
+        } else {
+          // Fallback for older browsers
+          const tmp = document.createElement('div');
+          tmp.style.position = 'fixed';
+          tmp.style.left = '-9999px';
+          tmp.contentEditable = 'true';
+          document.body.appendChild(tmp);
+          tmp.innerHTML = html;
+
+          const range = document.createRange();
+          range.selectNodeContents(tmp);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+
+          document.execCommand('copy');
+
+          sel.removeAllRanges();
+          tmp.remove();
+        }
+        toast("Rich Text (HTML) copied ✓");
+      } catch {
+        toast("Copy failed");
+      }
+    });
+
+    /* ========================================
+       MARKDOWN TRANSFORMS
+       Text transformations for Obsidian syntax and cleanup
+       ======================================== */
+
+    /**
+     * Transform functions for Markdown text processing
+     * These operate on the Markdown pane content
+     */
+    const transforms = {
+      /**
+       * Strip Wiki Links
+       * Converts Obsidian wiki-style links to plain text
+       * [[target|display]] -> display
+       * [[target]] -> target
+       */
+      'strip-wiki-links': (text) => {
+        return text.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')  // [[target|display]] -> display
+                   .replace(/\[\[([^\]]+)\]\]/g, '$1');            // [[target]] -> target
+      },
+
+      /**
+       * Wiki Links → Markdown Links
+       * Converts Obsidian wiki links to standard Markdown link syntax
+       * [[target|display]] -> [display](target)
+       * [[target]] -> [target](target)
+       */
+      'wiki-to-markdown': (text) => {
+        return text.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '[$2]($1)')  // [[target|display]]
+                   .replace(/\[\[([^\]]+)\]\]/g, '[$1]($1)');            // [[target]]
+      },
+
+      /**
+       * Strip %% %% Comments
+       * Permanently removes Obsidian comment blocks from Markdown
+       * Supports multiline comments
+       */
+      'strip-comments': (text) => {
+        return text.replace(/%%[\s\S]*?%%/g, '');
+      }
+    };
+
+    /**
+     * Transform dropdown change handler
+     * Applies the selected transform to the Markdown pane
+     */
+    transformSelect.addEventListener('change', (e) => {
+      const transformType = e.target.value;
+      if (!transformType) return;
+
+      const transform = transforms[transformType];
+      if (transform) {
+        state.lastEdited = 'md';
+        mdTA.value = transform(mdTA.value);
+        mdToHtml(); // Update rich text pane
+        toast(`Transform applied: ${transformSelect.options[transformSelect.selectedIndex].text}`);
+      }
+
+      // Reset dropdown to default (placeholder)
+      transformSelect.value = '';
+    });
+
+    /* ========================================
+       RESIZABLE DIVIDER
+       Allows user to adjust pane split by dragging
+       ======================================== */
+
+    /**
+     * Setup divider drag functionality
+     * Supports both horizontal (desktop) and vertical (mobile) drag
+     */
+    (function setupDivider() {
+      let dragging = false;
+      let vertical = false;  // Track orientation
+
+      /**
+       * Mouse/touch down handler
+       * Initiates drag operation
+       */
+      const onDown = (e) => {
+        dragging = true;
+        // Check if we're in mobile/vertical mode
+        vertical = window.matchMedia("(max-width:900px)").matches;
+        // Prevent text selection during drag
+        document.body.style.userSelect = 'none';
+      };
+
+      /**
+       * Mouse/touch move handler
+       * Updates pane sizes during drag
+       */
+      const onMove = (e) => {
+        if (!dragging) return;
+
+        // Get cursor/touch position
+        const pos = vertical
+          ? (e.touches?.[0]?.clientY ?? e.clientY)  // Vertical drag (mobile)
+          : (e.touches?.[0]?.clientX ?? e.clientX); // Horizontal drag (desktop)
+
+        const rect = panes.getBoundingClientRect();
+
+        if (!vertical) {
+          // Horizontal drag: update left pane width
+          const leftPx = pos - rect.left;
+          const rightPx = rect.width - leftPx - 8;  // Subtract divider width (8px)
+          panes.style.setProperty('--left-width', leftPx + 'px');
+        } else {
+          // Vertical drag: currently not persisted
+          // Could implement vertical split ratio here if needed
+        }
+      };
+
+      /**
+       * Mouse/touch up handler
+       * Ends drag operation and persists state
+       */
+      const onUp = () => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.userSelect = '';  // Re-enable text selection
+        save();  // Persist split ratio to localStorage
+      };
+
+      // Mouse events
+      divider.addEventListener('mousedown', onDown);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+
+      // Touch events (mobile)
+      divider.addEventListener('touchstart', onDown, {passive: true});
+      window.addEventListener('touchmove', onMove, {passive: true});
+      window.addEventListener('touchend', onUp);
+    })();
+
+    /* ========================================
+       PERSISTENCE (localStorage)
+       Automatically saves content and settings
+       ======================================== */
+
+    /**
+     * Save current state to localStorage
+     * Persists: content, split ratio, last edited pane
+     */
+    function save() {
+      const payload = {
+        markdown: mdTA.value,
+        html: rich.innerHTML,
+        lastEdited: state.lastEdited,
+        split: getComputedStyle(panes).getPropertyValue('--left-width')
+      };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(payload));
+      } catch (e) {
+        // localStorage might be full or disabled
+        console.error('Save failed:', e);
+      }
+    }
+
+    /**
+     * Restore previous state from localStorage
+     * Runs on page load
+     */
+    function restore() {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return;
+
+        const data = JSON.parse(raw);
+
+        // Restore split ratio
+        if (data.split && data.split !== 'auto') {
+          panes.style.setProperty('--left-width', data.split.trim());
+        }
+
+        // Restore content
+        if (data.markdown || data.html) {
+          if (data.lastEdited === 'md' || !data.lastEdited) {
+            // Last edited Markdown - restore from Markdown
+            mdTA.value = data.markdown || '';
+            mdToHtml();
+          } else {
+            // Last edited Rich Text - restore from HTML
+            rich.innerHTML = data.html || '';
+            // Clean up restored HTML (might have been pasted content)
+            normalizeTables(rich);
+            normalizeFormatting(rich);
+            stripColorStyles(rich);
+            secureLinks(rich);
+            htmlToMd();
+          }
+        }
+      } catch (e) {
+        console.error('Restore failed:', e);
+      }
+    }
+
+    // Restore state on page load
+    restore();
+
+    /**
+     * Clear button handler
+     * Resets both panes and clears localStorage
+     */
+    resetBtn.addEventListener('click', () => {
+      mdTA.value = '';
+      rich.innerHTML = '';
+      state.lastEdited = 'md';
+      localStorage.removeItem(storageKey);
+      toast("Cleared");
+    });
+
+    /* ========================================
+       INITIAL CONTENT
+       Show example content if editor is empty
+       ======================================== */
+
+    /**
+     * Seed example content on first load
+     * Shows users the capabilities of the editor
+     */
+    if (!mdTA.value && !rich.innerHTML) {
+      mdTA.value = `# Markdown ⇄ Rich Text
+
+Type **Markdown** here, or edit *Rich Text* on the right.
+- Live, bidirectional sync
+- Copy Markdown or HTML
+- Paste Markdown or HTML into the Rich pane
+
+| Feature | Status |
+| --- | --- |
+| Headings | ✅ |
+| Lists & Tasks | ✅ |
+| Tables | ✅ |
+| Code blocks | ✅ |`;
+      mdToHtml();
+    }
+  })();
+  </script>
+</body>
+</html>
