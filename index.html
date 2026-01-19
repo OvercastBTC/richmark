@@ -75,6 +75,71 @@
       margin: 0;
       font-weight: 600;
     }
+    
+    /* ========================================
+       Custom Titlebar (Word-style)
+       ======================================== */
+    .titlebar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(135deg, #2E8B57 0%, #3CB371 100%);
+      color: white;
+      padding: 6px 12px;
+      font-size: 13px;
+      -webkit-app-region: drag;
+      -webkit-user-select: none;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .titlebar-icon {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+    }
+
+    .titlebar-title {
+      font-weight: 500;
+    }
+
+    .titlebar-controls {
+      display: flex;
+      gap: 2px;
+      -webkit-app-region: no-drag;
+    }
+
+    .titlebar-btn {
+      width: 32px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      border-radius: 3px;
+      transition: background 0.1s;
+    }
+
+    .titlebar-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .titlebar-btn.close:hover {
+      background: #e81123;
+    }
 
     /* ========================================
        Panes Layout
@@ -206,6 +271,18 @@
       color: inherit;
     }
 
+    /* ++underline++ syntax - rendered as <ins> */
+    .rich ins {
+      text-decoration: underline;
+    }
+
+    /* ==highlight== syntax - rendered as <mark> */
+    .rich mark {
+      background: rgba(255, 200, 0, 0.3);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+
     /* Make empty contenteditable div take up space */
     .rich:empty:before {
       content: "";
@@ -271,9 +348,33 @@
   </style>
 </head>
 <body>
+  <!-- Custom Titlebar -->
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <div class="titlebar-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="richmarkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#90EE90;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#FFFFFF;stop-opacity:1" />
+            </linearGradient>
+          </defs>
+          <rect x="2" y="3" width="20" height="18" rx="2" stroke="url(#richmarkGradient)" stroke-width="2" fill="none"/>
+          <path d="M7 8h10M7 12h6M7 16h8" stroke="url(#richmarkGradient)" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="18" cy="14" r="3" fill="url(#richmarkGradient)"/>
+        </svg>
+      </div>
+      <span class="titlebar-title" id="titlebarTitle">Richmark - Markdown ⇄ Rich Text</span>
+    </div>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn" onclick="minimizeWindow()" title="Minimize">─</button>
+      <button class="titlebar-btn" onclick="maximizeWindow()" title="Maximize">☐</button>
+      <button class="titlebar-btn close" onclick="closeWindow()" title="Close">✕</button>
+    </div>
+  </div>
+
   <div class="app">
     <header>
-      <h1>Markdown ⇄ Rich Text</h1>
       <div style="display: flex; gap: 8px;">
         <button class="btn" id="pasteBtn" aria-label="Paste from clipboard">Paste</button>
         <button class="btn" id="resetBtn" aria-label="Clear editors">Clear</button>
@@ -316,6 +417,9 @@
 
   <!-- Dependencies (CDN). For full-offline, vendor these inline. -->
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@13/dist/markdown-it.min.js" integrity="" crossorigin="anonymous"></script>
+  <!-- markdown-it plugins for extended syntax -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it-ins@3/dist/markdown-it-ins.min.js" integrity="" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it-mark@3/dist/markdown-it-mark.min.js" integrity="" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js" integrity="" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js" integrity="" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js" integrity="" crossorigin="anonymous"></script>
@@ -377,6 +481,16 @@
       breaks: false        // Don't convert \n to <br> (use two spaces or <br>)
     });
 
+    // Add ++underline++ support via markdown-it-ins plugin
+    if (window.markdownitIns) {
+      md.use(window.markdownitIns);
+    }
+
+    // Add ==highlight== support via markdown-it-mark plugin
+    if (window.markdownitMark) {
+      md.use(window.markdownitMark);
+    }
+
     /**
      * Preprocessor: Strip Obsidian-style %% %% comments before rendering
      * This prevents comment blocks from appearing in the rich text view
@@ -424,7 +538,29 @@
     ]);
 
     // Keep HTML elements that don't have Markdown equivalents
-    turndownService.keep(['u', 'sup', 'sub']); // underline, superscript, subscript
+    turndownService.keep(['u', 'sup', 'sub']); // underline (u), superscript, subscript
+
+    /**
+     * Custom rule for <ins> → ++underline++ (markdown-it-ins syntax)
+     * Converts <ins>text</ins> to ++text++
+     */
+    turndownService.addRule('ins', {
+      filter: 'ins',
+      replacement: function (content) {
+        return '++' + content + '++';
+      }
+    });
+
+    /**
+     * Custom rule for <mark> → ==highlight== (markdown-it-mark syntax)
+     * Converts <mark>text</mark> to ==text==
+     */
+    turndownService.addRule('mark', {
+      filter: 'mark',
+      replacement: function (content) {
+        return '==' + content + '==';
+      }
+    });
 
     /**
      * Custom table conversion rule with colspan support
@@ -1315,6 +1451,41 @@ Type **Markdown** here, or edit *Rich Text* on the right.
       mdToHtml();
     }
   })();
+
+  // ========================================
+  // Window Control Functions
+  // ========================================
+  function minimizeWindow() {
+    if (window.chrome && window.chrome.webview) {
+      window.chrome.webview.postMessage({ type: 'minimize' });
+    }
+  }
+
+  function maximizeWindow() {
+    if (window.chrome && window.chrome.webview) {
+      window.chrome.webview.postMessage({ type: 'maximize' });
+    }
+  }
+
+  function closeWindow() {
+    if (window.chrome && window.chrome.webview) {
+      window.chrome.webview.postMessage({ type: 'close' });
+    }
+  }
+
+  function updateTitlebar(filename, isDirty) {
+    const titleEl = document.getElementById('titlebarTitle');
+    if (titleEl) {
+      const dirtyIndicator = isDirty ? ' •' : '';
+      titleEl.textContent = `Richmark - ${filename}${dirtyIndicator}`;
+    }
+  }
+
+  // Expose functions globally
+  window.minimizeWindow = minimizeWindow;
+  window.maximizeWindow = maximizeWindow;
+  window.closeWindow = closeWindow;
+  window.updateTitlebar = updateTitlebar;
   </script>
 </body>
 </html>
